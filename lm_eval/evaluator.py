@@ -55,6 +55,7 @@ def simple_evaluate(
     random_seed: int = 0,
     numpy_random_seed: int = 1234,
     torch_random_seed: int = 1234,
+    custom_args: Optional[dict] = None
 ):
     """Instantiate and evaluate a model on a list of tasks.
 
@@ -172,7 +173,7 @@ def simple_evaluate(
                     "device": device,
                 },
             )
-
+            
         else:
             eval_logger.info(
                 f"Initializing {model} model, with arguments: {simple_parse_args_string(model_args)}"
@@ -185,6 +186,15 @@ def simple_evaluate(
                     "device": device,
                 },
             )
+            
+            bottleneck_layer_idx = custom_args["bottleneck_layer_idx"]
+            truncate_ratio = custom_args["truncate_ratio"]
+            if bottleneck_layer_idx is not None and bottleneck_layer_idx >= 0:
+                print("setting bottleneck")
+                if hasattr(lm.model.model, "decoder"):
+                    lm.model.model.decoder.set_bottleneck_layer(bottleneck_layer_idx, truncate_ratio)
+                else: 
+                    lm.model.model.set_bottleneck_layer(bottleneck_layer_idx, truncate_ratio)
     else:
         if not isinstance(model, lm_eval.api.model.LM):
             raise TypeError

@@ -62,7 +62,7 @@ def _get_accelerate_args(
     args["offload_folder"] = offload_folder
     return args
 
-
+from transformers import AutoModelForCausalLM, AutoTokenizer
 @register_model("hf-auto", "hf", "huggingface")
 class HFLM(TemplateLM):
     """
@@ -527,23 +527,34 @@ class HFLM(TemplateLM):
                 model_kwargs.update({"device_map": {"": str(self.device)}})
 
         if not autogptq:
-            if model_kwargs.get("load_in_4bit", None):
-                assert (
-                    transformers.__version__ >= "4.30.0"
-                ), "load_in_4bit requires transformers >= 4.30.0"
-            if transformers.__version__ >= "4.30.0":
+            if model_kwargs.get("load_quantized_model", None): 
+                from accelerate import init_empty_weights
+                
+                from optimum.gptq import GPTQQuantizer, load_quantized_model
+                with init_empty_weights():
+                    empty_model = AutoModelForCausalLM.from_pretrained(pretrained, torch_dtype=torch.float16)
+                empty_model.tie_weights()
+                self._model = load_quantized_model(empty_model, save_folder=model_kwargs["quantized_model_path"])
+            elif model_kwargs.get("load_peft_model", None):
+                self._model = AutoModelForCausalLM.from_pretrained(model_kwargs["specified_model_path"], torch_dtype=torch.float16)
+            else: 
                 if model_kwargs.get("load_in_4bit", None):
-                    if model_kwargs.get("bnb_4bit_compute_dtype", None):
-                        model_kwargs["bnb_4bit_compute_dtype"] = get_dtype(
-                            model_kwargs["bnb_4bit_compute_dtype"]
-                        )
-            self._model = self.AUTO_MODEL_CLASS.from_pretrained(
-                pretrained,
-                revision=revision,
-                torch_dtype=get_dtype(dtype),
-                trust_remote_code=trust_remote_code,
-                **model_kwargs,
-            )
+                    assert (
+                        transformers.__version__ >= "4.30.0"
+                    ), "load_in_4bit requires transformers >= 4.30.0"
+                if transformers.__version__ >= "4.30.0":
+                    if model_kwargs.get("load_in_4bit", None):
+                        if model_kwargs.get("bnb_4bit_compute_dtype", None):
+                            model_kwargs["bnb_4bit_compute_dtype"] = get_dtype(
+                                model_kwargs["bnb_4bit_compute_dtype"]
+                            )
+                self._model = self.AUTO_MODEL_CLASS.from_pretrained(
+                    pretrained,
+                    revision=revision,
+                    torch_dtype=get_dtype(dtype),
+                    trust_remote_code=trust_remote_code,
+                    **model_kwargs,
+                )
         else:
             try:
                 from auto_gptq import AutoGPTQForCausalLM

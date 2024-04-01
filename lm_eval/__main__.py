@@ -229,6 +229,9 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Sets trust_remote_code to True to execute code to create HF Datasets from the Hub",
     )
 
+    parser.add_argument("--truncate_ratio", type=float, help="Truncate Ratio")
+    parser.add_argument("--bottleneck_layer_idx", type=int, help="bottleneck_layer_idx")
+
     return parser
 
 
@@ -359,6 +362,7 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
         numpy_random_seed=args.seed[1],
         torch_random_seed=args.seed[2],
         **request_caching_args,
+        custom_args={"truncate_ratio": args.truncate_ratio, "bottleneck_layer_idx": args.bottleneck_layer_idx}
     )
 
     if results is not None:
