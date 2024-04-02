@@ -54,6 +54,8 @@ def handle_arg_string(arg):
         return False
     elif arg.isnumeric():
         return int(arg)
+    elif "_" in arg:
+        return arg
     try:
         return float(arg)
     except ValueError:
