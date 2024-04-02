@@ -187,14 +187,6 @@ def simple_evaluate(
                 },
             )
             
-            bottleneck_layer_idx = custom_args["bottleneck_layer_idx"]
-            truncate_ratio = custom_args["truncate_ratio"]
-            if bottleneck_layer_idx is not None and bottleneck_layer_idx >= 0:
-                print("setting bottleneck")
-                if hasattr(lm.model.model, "decoder"):
-                    lm.model.model.decoder.set_bottleneck_layer(bottleneck_layer_idx, truncate_ratio)
-                else: 
-                    lm.model.model.set_bottleneck_layer(bottleneck_layer_idx, truncate_ratio)
     else:
         if not isinstance(model, lm_eval.api.model.LM):
             raise TypeError

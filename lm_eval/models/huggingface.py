@@ -537,6 +537,19 @@ class HFLM(TemplateLM):
                 self._model = load_quantized_model(empty_model, save_folder=model_kwargs["quantized_model_path"])
             elif model_kwargs.get("load_peft_model", None):
                 self._model = AutoModelForCausalLM.from_pretrained(model_kwargs["specified_model_path"], torch_dtype=torch.float16)
+            elif model_kwargs.get("load_truncate_model", None):
+                
+                model_name = pretrained
+                if "Llama" in model_name:
+                    import sys
+                    sys.path.append('/home/jingcan/workspace/device_cloud/weight_svd')
+                    from models.modeling_llama import LlamaForCausalLMWithBottleneck
+                    bottleneck_layer_idx = model_kwargs["bottleneck_layer_idx"]
+                    truncate_ratio = model_kwargs["truncate_ratio"]
+                    self._model = LlamaForCausalLMWithBottleneck.from_pretrained(model_name, torch_dtype=torch.float16, bottleneck_layer_idx=bottleneck_layer_idx, truncate_ratio=truncate_ratio)
+                    
+                    
+                    
             else: 
                 if model_kwargs.get("load_in_4bit", None):
                     assert (
