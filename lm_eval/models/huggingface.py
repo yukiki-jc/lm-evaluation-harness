@@ -63,6 +63,9 @@ def _get_accelerate_args(
     return args
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
+import sys
+sys.path.append('/home/jingcan/workspace/device_cloud/weight_svd')
+from models.modeling_llama import LlamaForCausalLMWithBottleneck
 @register_model("hf-auto", "hf", "huggingface")
 class HFLM(TemplateLM):
     """
@@ -227,6 +230,7 @@ class HFLM(TemplateLM):
                 # or any other option that preloads model onto device
                 try:
                     self.model.to(self.device)
+                # add something to do the device map here
                 except ValueError:
                     eval_logger.debug(
                         "Failed to place model onto specified device. This may be because the model is quantized via `bitsandbytes` or `device_map` is provided. If the desired GPU is being used, this message is safe to ignore."
@@ -536,20 +540,28 @@ class HFLM(TemplateLM):
                 empty_model.tie_weights()
                 self._model = load_quantized_model(empty_model, save_folder=model_kwargs["quantized_model_path"])
             elif model_kwargs.get("load_peft_model", None):
-                self._model = AutoModelForCausalLM.from_pretrained(model_kwargs["specified_model_path"], torch_dtype=torch.float16)
+                bottleneck_layer_idx = model_kwargs["bottleneck_layer_idx"]
+                truncate_ratio = model_kwargs["truncate_ratio"]
+                train_reverse_norm = model_kwargs["train_reverse_norm"]
+                apply_reverse_norm = model_kwargs["apply_reverse_norm"]
+                model_name = pretrained
+                self._model = LlamaForCausalLMWithBottleneck.from_pretrained(model_name, torch_dtype=torch.float16, bottleneck_layer_idx=bottleneck_layer_idx, truncate_ratio=truncate_ratio, train_reverse_norm=train_reverse_norm, apply_reverse_norm=apply_reverse_norm)
+                self._model.prepare_bottleneck_layers(load_path=model_kwargs["specified_model_path"])
+                self._model = PeftModel.from_pretrained(
+                    self._model,
+                    model_kwargs["specified_model_path"],
+                    torch_dtype=torch.float16,
+                )
             elif model_kwargs.get("load_truncate_model", None):
                 
                 model_name = pretrained
                 if "Llama" in model_name:
-                    import sys
-                    sys.path.append('/home/jingcan/workspace/device_cloud/weight_svd')
-                    from models.modeling_llama import LlamaForCausalLMWithBottleneck
+                    train_reverse_norm = model_kwargs["train_reverse_norm"]
+                    apply_reverse_norm = model_kwargs["apply_reverse_norm"]
                     bottleneck_layer_idx = model_kwargs["bottleneck_layer_idx"]
                     truncate_ratio = model_kwargs["truncate_ratio"]
-                    self._model = LlamaForCausalLMWithBottleneck.from_pretrained(model_name, torch_dtype=torch.float16, bottleneck_layer_idx=bottleneck_layer_idx, truncate_ratio=truncate_ratio)
-                    
-                    
-                    
+                    self._model = LlamaForCausalLMWithBottleneck.from_pretrained(model_name, torch_dtype=torch.float16, bottleneck_layer_idx=bottleneck_layer_idx, truncate_ratio=truncate_ratio, train_reverse_norm=train_reverse_norm, apply_reverse_norm=apply_reverse_norm)
+                    self._model.prepare_bottleneck_layers()
             else: 
                 if model_kwargs.get("load_in_4bit", None):
                     assert (
