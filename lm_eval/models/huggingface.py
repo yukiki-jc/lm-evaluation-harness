@@ -3,7 +3,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
-
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import torch.nn.functional as F
 import transformers
@@ -33,7 +33,9 @@ from lm_eval.models.utils import (
     pad_and_concat,
     stop_sequences_criteria,
 )
-
+import sys
+sys.path.append('/home/jingcan/workspace/device_cloud/weight_svd/models')
+from svd_llm_utils import * 
 
 eval_logger = utils.eval_logger
 
@@ -65,7 +67,9 @@ def _get_accelerate_args(
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import sys
 sys.path.append('/home/jingcan/workspace/device_cloud/weight_svd')
-from models.modeling_llama import LlamaForCausalLMWithBottleneck
+from models.modeling_llama import LlamaForCausalLMWithBottleneck, LlamaModelWithBottleneck
+from models.llama_seg import LlamaSegForCausalLMWithBottleneck
+from models.llama_seg import BottleneckConfig
 @register_model("hf-auto", "hf", "huggingface")
 class HFLM(TemplateLM):
     """
@@ -545,23 +549,43 @@ class HFLM(TemplateLM):
                 train_reverse_norm = model_kwargs["train_reverse_norm"]
                 apply_reverse_norm = model_kwargs["apply_reverse_norm"]
                 model_name = pretrained
-                self._model = LlamaForCausalLMWithBottleneck.from_pretrained(model_name, torch_dtype=torch.float16, bottleneck_layer_idx=bottleneck_layer_idx, truncate_ratio=truncate_ratio, train_reverse_norm=train_reverse_norm, apply_reverse_norm=apply_reverse_norm)
-                self._model.prepare_bottleneck_layers(load_path=model_kwargs["specified_model_path"])
+                if truncate_ratio < 0: 
+                    self._model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16)
+                else: 
+                    self._model = LlamaForCausalLMWithBottleneck.from_pretrained(model_name, torch_dtype=torch.float16, bottleneck_layer_idx=bottleneck_layer_idx, truncate_ratio=truncate_ratio, train_reverse_norm=train_reverse_norm, apply_reverse_norm=apply_reverse_norm)
+                    self._model.prepare_bottleneck_layers(load_path=model_kwargs["specified_model_path"])
                 self._model = PeftModel.from_pretrained(
                     self._model,
                     model_kwargs["specified_model_path"],
-                    torch_dtype=torch.float16,
                 )
             elif model_kwargs.get("load_truncate_model", None):
-                
                 model_name = pretrained
                 if "Llama" in model_name:
                     train_reverse_norm = model_kwargs["train_reverse_norm"]
                     apply_reverse_norm = model_kwargs["apply_reverse_norm"]
                     bottleneck_layer_idx = model_kwargs["bottleneck_layer_idx"]
                     truncate_ratio = model_kwargs["truncate_ratio"]
-                    self._model = LlamaForCausalLMWithBottleneck.from_pretrained(model_name, torch_dtype=torch.float16, bottleneck_layer_idx=bottleneck_layer_idx, truncate_ratio=truncate_ratio, train_reverse_norm=train_reverse_norm, apply_reverse_norm=apply_reverse_norm)
+                    
+                    model_name = "meta-llama/Llama-2-7b-hf"
+                    layer_idxs = LlamaModelWithBottleneck.get_bottleneck_layer_idx_list(bottleneck_layer_idx)
+                    profile = profile_svd_llm(model_name, layer_idxs, dev="cuda:0")
+
+                    
+                    torch.cuda.empty_cache()
+
+                    self._model = LlamaForCausalLMWithBottleneck.from_pretrained(model_name, bottleneck_layer_idx=bottleneck_layer_idx, truncate_ratio=truncate_ratio, train_reverse_norm=train_reverse_norm, apply_reverse_norm=apply_reverse_norm, torch_dtype=torch.float16) 
+                    self._model.prepare_svd_llm_profile(profile)
                     self._model.prepare_bottleneck_layers()
+                    print(self._model)
+            elif model_kwargs.get("load_segment_model", None):
+                model_name = pretrained
+                if "Llama" in model_name:
+                    train_reverse_norm = model_kwargs["train_reverse_norm"]
+                    apply_reverse_norm = model_kwargs["apply_reverse_norm"]
+                    bottleneck_layer_idx = model_kwargs["bottleneck_layer_idx"]
+                    truncate_ratio = model_kwargs["truncate_ratio"]
+                    bottleneck_config = BottleneckConfig(bottleneck_layer_idx=bottleneck_layer_idx, truncate_ratio=truncate_ratio, apply_reverse_norm=apply_reverse_norm, train_reverse_norm=train_reverse_norm)
+                    self._model = LlamaSegForCausalLMWithBottleneck.from_pretrained(model_name, torch_dtype=torch.float16, bottleneck_config=bottleneck_config)
             else: 
                 if model_kwargs.get("load_in_4bit", None):
                     assert (
