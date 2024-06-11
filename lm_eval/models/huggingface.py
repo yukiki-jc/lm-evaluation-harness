@@ -572,8 +572,8 @@ class HFLM(TemplateLM):
 
                     
                     torch.cuda.empty_cache()
-
-                    self._model = LlamaForCausalLMWithBottleneck.from_pretrained(model_name, bottleneck_layer_idx=bottleneck_layer_idx, truncate_ratio=truncate_ratio, train_reverse_norm=train_reverse_norm, apply_reverse_norm=apply_reverse_norm, torch_dtype=torch.float16) 
+                    bottleneck_config = BottleneckConfig(bottleneck_layer_idx=bottleneck_layer_idx, truncate_ratio=truncate_ratio, apply_reverse_norm=apply_reverse_norm, train_reverse_norm=train_reverse_norm)
+                    self._model = LlamaForCausalLMWithBottleneck.from_pretrained(model_name, bottleneck_config, torch_dtype=torch.float16) 
                     self._model.prepare_svd_llm_profile(profile)
                     self._model.prepare_bottleneck_layers()
                     print(self._model)
